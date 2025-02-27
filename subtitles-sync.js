@@ -1,17 +1,23 @@
 // ==LampaPlugin==
 // Name: Subtitles Sync
-// Description: Плагин для поиска и синхронизации субтитров из открытых источников
-// Version: 1.0.1
+// Description: Plugin for searching and syncing subtitles from open sources
+// Version: 1.0.2
 // Author: grafbraga
 // ==/LampaPlugin==
 
 (function () {
     'use strict';
 
+    // Проверка наличия Lampa
+    if (!window.Lampa) {
+        console.error('[SubtitlesSync] Lampa environment not found');
+        return;
+    }
+
     // Основной объект плагина
     const SubtitlesSync = {
         name: 'SubtitlesSync',
-        version: '1.0.1',
+        version: '1.0.2',
         sources: {
             'Subadub': 'https://subadub.app',
             'Subscene': 'https://subscene.com',
@@ -24,17 +30,20 @@
 
         // Инициализация плагина
         init: function () {
+            if (!Lampa.Settings || !Lampa.PlayerMenu || !Lampa.Player) {
+                console.error('[SubtitlesSync] Required Lampa modules not found');
+                return;
+            }
             this.addSettings();
             this.injectMenu();
             Lampa.Listener.follow('player', this.onPlayer.bind(this));
         },
 
-        // Добавление настроек в интерфейс Lampa
+        // Добавление настроек
         addSettings: function () {
-            const settings = Lampa.Settings;
-            settings.add(this.name, {
+            Lampa.Settings.add(this.name, {
                 subtitles_source: {
-                    name: 'Источник субтитров',
+                    name: 'Subtitles Source',
                     type: 'select',
                     values: this.sources,
                     default: this.defaultSource,
@@ -44,7 +53,7 @@
                     }
                 },
                 subtitles_lang: {
-                    name: 'Язык субтитров',
+                    name: 'Subtitles Language',
                     type: 'select',
                     values: this.languages.reduce((acc, lang) => {
                         acc[lang] = lang.toUpperCase();
@@ -58,35 +67,36 @@
                 }
             });
 
-            // Загрузка сохранённых настроек
             this.selectedSource = Lampa.Storage.get('subtitles_source', this.defaultSource);
             this.selectedLang = Lampa.Storage.get('subtitles_lang', this.selectedLang);
         },
 
-        // Вставка пункта меню в плеер
+        // Вставка в меню плеера
         injectMenu: function () {
-            const menu = Lampa.PlayerMenu;
-            menu.add({
+            Lampa.PlayerMenu.add({
                 title: 'Subtitles Sync',
-                subtitle: 'Поиск и синхронизация субтитров',
+                subtitle: 'Search and sync subtitles',
                 icon: 'subtitles',
                 action: () => this.showSubtitlesMenu()
             });
         },
 
-        // Отображение меню выбора субтитров
+        // Меню субтитров
         showSubtitlesMenu: function () {
             const film = Lampa.Player.data;
-            if (!film || !film.movie) return Lampa.Noty.show('Нет данных о фильме');
+            if (!film || !film.movie) {
+                Lampa.Noty.show('No movie data available');
+                return;
+            }
 
             const movieTitle = film.movie.title || film.movie.name;
             const movieYear = film.movie.year || '';
 
             Lampa.Select.show({
-                title: 'Субтитры для: ' + movieTitle,
+                title: 'Subtitles for: ' + movieTitle,
                 items: [
-                    { title: 'Найти субтитры', action: 'search' },
-                    { title: 'Загрузить вручную', action: 'manual' }
+                    { title: 'Search Subtitles', action: 'search' },
+                    { title: 'Load Manually', action: 'manual' }
                 ],
                 onSelect: (item) => {
                     if (item.action === 'search') this.searchSubtitles(movieTitle, movieYear);
@@ -96,8 +106,8 @@
         },
 
         // Поиск субтитров
-        searchSubtitles: async function (title, year) {
-            Lampa.Noty.show('Поиск субтитров...');
+        searchSubtitles: function (title, year) {
+            Lampa.Noty.show('Searching subtitles...');
             const query = encodeURIComponent(`${title} ${year} ${this.selectedLang}`);
             const sourceUrl = this.sources[this.selectedSource];
             let subtitlesUrl;
@@ -110,23 +120,24 @@
                 subtitlesUrl = `${sourceUrl}/search?query=${query}`;
             }
 
-            try {
-                const response = await fetch(subtitlesUrl);
-                const text = await response.text();
-                const subtitles = await this.parseSubtitles(text, this.selectedSource);
-
-                if (subtitles.length) {
-                    this.showSubtitlesList(subtitles);
-                } else {
-                    Lampa.Noty.show('Субтитры не найдены');
-                }
-            } catch (e) {
-                Lampa.Noty.show('Ошибка при поиске субтитров: ' + e.message);
-            }
+            fetch(subtitlesUrl)
+                .then(response => response.text())
+                .then(text => {
+                    const subtitles = this.parseSubtitles(text, this.selectedSource);
+                    if (subtitles.length) {
+                        this.showSubtitlesList(subtitles);
+                    } else {
+                        Lampa.Noty.show('No subtitles found');
+                    }
+                })
+                .catch(e => {
+                    console.error('[SubtitlesSync] Search error:', e);
+                    Lampa.Noty.show('Error searching subtitles');
+                });
         },
 
-        // Парсинг субтитров в зависимости от источника
-        parseSubtitles: async function (html, source) {
+        // Парсинг субтитров
+        parseSubtitles: function (html, source) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
             const subtitles = [];
@@ -138,16 +149,11 @@
                 });
             } else if (source === 'Subscene') {
                 const links = doc.querySelectorAll('a[href*="/subtitles/"]');
-                for (let link of links) {
+                links.forEach(link => {
                     const title = link.textContent.trim();
                     const href = `https://subscene.com${link.getAttribute('href')}`;
-                    const subPage = await fetch(href).then(res => res.text());
-                    const subDoc = parser.parseFromString(subPage, 'text/html');
-                    const downloadLink = subDoc.querySelector('a[href*="/subtitle/download"]');
-                    if (downloadLink) {
-                        subtitles.push({ title, url: downloadLink.href });
-                    }
-                }
+                    subtitles.push({ title, url: href }); // Финальная ссылка будет загружена позже
+                });
             } else if (source === 'GetSubad') {
                 const links = doc.querySelectorAll('a[href*=".srt"]');
                 links.forEach(link => {
@@ -155,34 +161,61 @@
                 });
             }
 
-            return subtitles.slice(0, 5); // Ограничение на 5 результатов
+            return subtitles.slice(0, 5);
         },
 
-        // Отображение списка найденных субтитров
+        // Показать список субтитров
         showSubtitlesList: function (subtitles) {
             Lampa.Select.show({
-                title: 'Выберите субтитры',
+                title: 'Select Subtitles',
                 items: subtitles.map(sub => ({ title: sub.title })),
                 onSelect: (item) => {
                     const selected = subtitles.find(sub => sub.title === item.title);
-                    this.loadSubtitles(selected.url);
+                    this.loadSubtitles(selected.url, this.selectedSource);
                 }
             });
         },
 
         // Загрузка субтитров
-        loadSubtitles: async function (url) {
-            try {
-                const response = await fetch(url);
-                const srtText = await response.text();
-                this.applySubtitles(srtText);
-                Lampa.Noty.show('Субтитры загружены');
-            } catch (e) {
-                Lampa.Noty.show('Ошибка загрузки субтитров: ' + e.message);
+        loadSubtitles: function (url, source) {
+            if (source === 'Subscene') {
+                // Для Subscene нужен второй запрос
+                fetch(url)
+                    .then(res => res.text())
+                    .then(text => {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(text, 'text/html');
+                        const downloadLink = doc.querySelector('a[href*="/subtitle/download"]');
+                        if (downloadLink) {
+                            this.fetchSubtitlesFile(downloadLink.href);
+                        } else {
+                            Lampa.Noty.show('Download link not found');
+                        }
+                    })
+                    .catch(e => {
+                        console.error('[SubtitlesSync] Subscene load error:', e);
+                        Lampa.Noty.show('Error loading subtitles');
+                    });
+            } else {
+                this.fetchSubtitlesFile(url);
             }
         },
 
-        // Применение субтитров к плееру
+        // Загрузка файла субтитров
+        fetchSubtitlesFile: function (url) {
+            fetch(url)
+                .then(response => response.text())
+                .then(srtText => {
+                    this.applySubtitles(srtText);
+                    Lampa.Noty.show('Subtitles loaded');
+                })
+                .catch(e => {
+                    console.error('[SubtitlesSync] File load error:', e);
+                    Lampa.Noty.show('Error loading subtitles file');
+                });
+        },
+
+        // Применение субтитров
         applySubtitles: function (srtText) {
             const player = Lampa.Player;
             player.subtitles.add({
@@ -191,7 +224,7 @@
             });
         },
 
-        // Парсинг SRT формата
+        // Парсинг SRT
         parseSRT: function (srtText) {
             const lines = srtText.split('\n');
             const subtitles = [];
@@ -217,14 +250,18 @@
             return subtitles;
         },
 
-        // Преобразование времени SRT в секунды
+        // Время в секунды
         timeToSeconds: function (time) {
             const [hours, minutes, seconds] = time.replace(',', '.').split(':');
             return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
         },
 
-        // Ручная загрузка субтитров
+        // Ручная загрузка
         manualUpload: function () {
+            if (!Lampa.File) {
+                Lampa.Noty.show('File upload not supported');
+                return;
+            }
             Lampa.File.upload({
                 accept: '.srt,.sub',
                 callback: (files) => {
@@ -237,20 +274,21 @@
             });
         },
 
-        // Обработка событий плеера
+        // События плеера
         onPlayer: function (e) {
             if (e.type === 'start') {
-                // Можно добавить автоматический поиск субтитров при старте
+                // Автоматический поиск можно добавить здесь
             }
         }
     };
 
-    // Запуск плагина
-    SubtitlesSync.init();
-
-    // Регистрация плагина в Lampa
-    if (window.Lampa) {
+    // Инициализация
+    try {
+        SubtitlesSync.init();
         window.Lampa.Plugins = window.Lampa.Plugins || {};
         window.Lampa.Plugins[SubtitlesSync.name] = SubtitlesSync;
+        console.log('[SubtitlesSync] Plugin loaded successfully');
+    } catch (e) {
+        console.error('[SubtitlesSync] Initialization error:', e);
     }
 })();
