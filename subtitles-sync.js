@@ -2,7 +2,7 @@
 // Name: Subtitles Sync
 // Description: Plugin for loading subtitles via direct .srt links from Subadub and My-Subs
 // Version: 1.0.11
-// Author: Grok3-xAI
+// Author: grafbraga
 // ==/LampaPlugin==
 
 (function () {
