@@ -1,6 +1,150 @@
 // ==LampaPlugin==
 // Name: Subtitles Sync
 // Description: Plugin for loading subtitles via direct .srt links from Subadub and My-Subs
+// Version: 1.0.11
+// Author: Grok3-xAI
+// ==/LampaPlugin==
+
+(function () {
+    'use strict';
+
+    if (!window.Lampa) return;
+
+    var SubtitlesSync = {
+        name: 'SubtitlesSync',
+        version: '1.0.11',
+        sources: {
+            'Subadub': 'https://subadub.app',
+            'My-Subs': 'https://my-subs.co'
+        },
+        defaultSource: 'My-Subs',
+        languages: ['en', 'ru', 'es', 'fr', 'de'],
+        selectedLang: 'en',
+        selectedSource: 'My-Subs',
+
+        init: function () {
+            // Упрощенная инициализация: только меню плеера и обработка событий
+            Lampa.PlayerMenu.add({
+                title: 'Subtitles Sync',
+                subtitle: 'Load subtitles via direct links',
+                icon: 'subtitles',
+                action: () => this.showSubtitlesMenu()
+            });
+
+            Lampa.Listener.follow('player', this.onPlayer.bind(this));
+        },
+
+        showSubtitlesMenu: function () {
+            var film = Lampa.Player.data;
+            if (!film || !film.movie) {
+                Lampa.Noty.show('No movie data available');
+                return;
+            }
+
+            var movieTitle = film.movie.title || film.movie.name;
+            var movieYear = film.movie.year || '';
+
+            Lampa.Select.show({
+                title: 'Subtitles for: ' + movieTitle,
+                items: [
+                    { title: 'Load Subtitles', action: 'search' },
+                    { title: 'Load Manually', action: 'manual' }
+                ],
+                onSelect: (item) => {
+                    if (item.action === 'search') this.loadSubtitlesDirect(movieTitle, movieYear);
+                    else if (item.action === 'manual') this.manualUpload();
+                }
+            });
+        },
+
+        loadSubtitlesDirect: function (title, year) {
+            Lampa.Noty.show('Loading subtitles...');
+            var query = encodeURIComponent(title.toLowerCase().replace(/ /g, '-'));
+            var subtitlesUrl = this.selectedSource === 'Subadub' ?
+                `https://subadub.app/subtitles/${query}-${this.selectedLang}.srt` :
+                `https://my-subs.co/subtitles/${query}-${year}-${this.selectedLang}.srt`;
+
+            fetch(subtitlesUrl, {
+                headers: { 'Accept': 'text/plain' }
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP error ' + response.status);
+                    return response.text();
+                })
+                .then(srtText => {
+                    this.applySubtitles(srtText);
+                    Lampa.Noty.show('Subtitles loaded successfully');
+                })
+                .catch(e => Lampa.Noty.show('Failed to load subtitles: ' + e.message));
+        },
+
+        applySubtitles: function (srtText) {
+            Lampa.Player.subtitles.add({
+                label: this.selectedLang.toUpperCase() + ' - ' + this.selectedSource,
+                content: this.parseSRT(srtText)
+            });
+        },
+
+        parseSRT: function (srtText) {
+            var lines = srtText.split('\n');
+            var subtitles = [];
+            var current = null;
+
+            for (var line of lines) {
+                line = line.trim();
+                if (!line) continue;
+
+                if (!isNaN(line) && !current) {
+                    current = { id: parseInt(line) };
+                } else if (line.includes('-->')) {
+                    var [start, end] = line.split(' --> ');
+                    current.start = this.timeToSeconds(start);
+                    current.end = this.timeToSeconds(end);
+                } else if (current && !current.text) {
+                    current.text = line;
+                    subtitles.push(current);
+                    current = null;
+                }
+            }
+
+            return subtitles;
+        },
+
+        timeToSeconds: function (time) {
+            var [hours, minutes, seconds] = time.replace(',', '.').split(':');
+            return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseFloat(seconds);
+        },
+
+        manualUpload: function () {
+            if (!Lampa.File) {
+                Lampa.Noty.show('File upload not supported');
+                return;
+            }
+            Lampa.File.upload({
+                accept: '.srt,.sub',
+                callback: (files) => {
+                    if (files.length) {
+                        var reader = new FileReader();
+                        reader.onload = (e) => this.applySubtitles(e.target.result);
+                        reader.readAsText(files[0]);
+                    }
+                }
+            });
+        },
+
+        onPlayer: function (e) {
+            if (e.type === 'start') {}
+        }
+    };
+
+    SubtitlesSync.init();
+
+    if (window.Lampa && window.Lampa.Plugins) {
+        window.Lampa.Plugins[SubtitlesSync.name] = SubtitlesSync;
+    }
+})();// ==LampaPlugin==
+// Name: Subtitles Sync
+// Description: Plugin for loading subtitles via direct .srt links from Subadub and My-Subs
 // Version: 1.0.9
 // Author: grafbraga
 // Note: Load via CORS proxy if needed, e.g., https://cors-anywhere.herokuapp.com/
