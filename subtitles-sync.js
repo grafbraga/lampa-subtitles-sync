@@ -1,22 +1,24 @@
 // ==LampaPlugin==
 // Name: Subtitles Sync
 // Description: Plugin for loading subtitles via direct .srt links from Subadub and My-Subs
-// Version: 1.0.7
+// Version: 1.0.8
 // Author: grafbraga
 // ==/LampaPlugin==
 
 (function () {
     'use strict';
 
-    // Проверка наличия Lampa
+    // Проверка окружения
     if (typeof window.Lampa === 'undefined') {
         console.error('[SubtitlesSync] Lampa environment not found');
         return;
     }
 
+    console.log('[SubtitlesSync] Script started');
+
     const SubtitlesSync = {
         name: 'SubtitlesSync',
-        version: '1.0.7',
+        version: '1.0.8',
         sources: {
             'Subadub': 'https://subadub.app',
             'My-Subs': 'https://my-subs.co'
@@ -27,7 +29,6 @@
         selectedSource: 'My-Subs',
 
         init: function () {
-            // Проверка необходимых модулей
             if (!Lampa.Settings || !Lampa.PlayerMenu || !Lampa.Player || !Lampa.Menu) {
                 console.error('[SubtitlesSync] Required Lampa modules not found');
                 return;
@@ -224,6 +225,7 @@
     };
 
     try {
+        console.log('[SubtitlesSync] Attempting to initialize plugin');
         SubtitlesSync.init();
         window.Lampa.Plugins = window.Lampa.Plugins || {};
         window.Lampa.Plugins[SubtitlesSync.name] = SubtitlesSync;
