@@ -1,24 +1,24 @@
 // ==LampaPlugin==
 // Name: Subtitles Sync
 // Description: Plugin for loading subtitles via direct .srt links from Subadub and My-Subs
-// Version: 1.0.8
+// Version: 1.0.9
 // Author: grafbraga
+// Note: Load via CORS proxy if needed, e.g., https://cors-anywhere.herokuapp.com/
 // ==/LampaPlugin==
 
 (function () {
     'use strict';
 
-    // Проверка окружения
+    console.log('[SubtitlesSync] Script started');
+
     if (typeof window.Lampa === 'undefined') {
         console.error('[SubtitlesSync] Lampa environment not found');
         return;
     }
 
-    console.log('[SubtitlesSync] Script started');
-
     const SubtitlesSync = {
         name: 'SubtitlesSync',
-        version: '1.0.8',
+        version: '1.0.9',
         sources: {
             'Subadub': 'https://subadub.app',
             'My-Subs': 'https://my-subs.co'
